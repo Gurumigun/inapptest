@@ -22,7 +22,6 @@ import com.orhanobut.logger.Logger
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.experimental.android.UI
 import kotlinx.coroutines.experimental.launch
-import org.json.JSONException
 import org.json.JSONObject
 import java.util.*
 
@@ -161,41 +160,61 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun buyItems(item: SponsorVo) {
+        deleteAlreadyPurchaseItems()
         try {
-            mIabHelper?.flagEndAsync()
-            // 리스너 방식
-            mIabHelper?.launchPurchaseFlow(this, testString ?: item.productId, 1000) { result, info ->
-                //            mIabHelper.launchPurchaseFlow(this, "android.test.purchased", 1000, { result, info ->
-                if (result.response == IabHelper.BILLING_RESPONSE_RESULT_OK
-                        && info != null) {
-                    val originalJson = info.originalJson
-                    val dataSignature = info.signature
+            val bundle = mService!!.getBuyIntent(3, packageName, testString ?: item.productId, item.type, packageName)
+            val pendingIntent = bundle?.getParcelable<PendingIntent>("BUY_INTENT")
+            if (pendingIntent != null || BuildConfig.DEBUG) {
+                mIabHelper?.flagEndAsync()
+                // 리스너 방식
+                mIabHelper?.launchPurchaseFlow(this, testString ?: item.productId, 1000) { result, info ->
+                    //            mIabHelper.launchPurchaseFlow(this, "android.test.purchased", 1000, { result, info ->
+                    when (result.response) {
+                        IabHelper.BILLING_RESPONSE_RESULT_OK -> {
+                            if (info != null) {
+                                val originalJson = info.originalJson
+                                val dataSignature = info.signature
 
-                    Log.d("KIY", "$originalJson , $dataSignature")
-                    // 위의 사항들 체크 후 아이템 추가
-                    try {
-                        val jo = JSONObject(originalJson)
-                        val sku = jo.getString("productId")
+                                Log.d("KIY", "$originalJson , $dataSignature")
+                                // 위의 사항들 체크 후 아이템 추가
+                                val jo = JSONObject(originalJson)
+                                this@MainActivity.showAlert("결제에 성공하였습니다")
+                            } else {
+                                this@MainActivity.showAlert("결제에 실패하였습니다.")
+                            }
+                        }
+                        IabHelper.BILLING_RESPONSE_RESULT_USER_CANCELED -> {
 
-                        deleteAlreadyPurchaseItems()
-                    } catch (e: JSONException) {
-                        this@MainActivity.showAlert("결제에 성공하였습니다")
-                    }
-                } else if (result.response == IabHelper.IABHELPER_UNKNOWN_ERROR) {
-                    this@MainActivity.showAlert("결제에 실패하였습니다.")
-                    return@launchPurchaseFlow
-                } else {
-                    if (info == null) {
-                        return@launchPurchaseFlow
+                            this@MainActivity.showAlert("RESULT_USER_CANCELED 결제에 실패하였습니다.")
+                            return@launchPurchaseFlow
+                        }
+                        IabHelper.BILLING_RESPONSE_RESULT_ITEM_UNAVAILABLE -> {
+
+                            this@MainActivity.showAlert("RESULT_ITEM_UNAVAILABLE 결제에 실패하였습니다.")
+                            return@launchPurchaseFlow
+                        }
+                        IabHelper.BILLING_RESPONSE_RESULT_ITEM_UNAVAILABLE -> {
+
+                            this@MainActivity.showAlert("결제에 실패하였습니다.")
+                            return@launchPurchaseFlow
+                        }
+                        IabHelper.IABHELPER_UNKNOWN_ERROR -> {
+                            this@MainActivity.showAlert("UNKNOWN_ERROR 결제에 실패하였습니다.")
+                            return@launchPurchaseFlow
+                        }
+                        IabHelper.BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED -> {
+                            this@MainActivity.showAlert("RESULT_ITEM_ALREADY_OWNED")
+                            return@launchPurchaseFlow
+                        }
+                        else -> {
+                            this@MainActivity.showAlert("결제에 실패하였습니다.")
+                            return@launchPurchaseFlow
+                        }
                     }
                 }
-
-            }
-            val bundle = mService!!.getBuyIntent(3, packageName, testString ?: item.productId, item.type, packageName)
 //            val bundle = mService!!.getBuyIntent(3, packageName, testString ?: item.productId , item.type, packageName)
-            val pendingIntent = bundle?.getParcelable<PendingIntent>("BUY_INTENT")
-            if (pendingIntent != null) {
-                // onActivityResult방식
+//            val pendingIntent = bundle?.getParcelable<PendingIntent>("BUY_INTENT")
+//                 onActivityResult방식
 //                startIntentSenderForResult(pendingIntent.intentSender,
 //                        1000,
 //                        Intent(),
@@ -203,7 +222,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 //                        Integer.valueOf(0),
 //                        Integer.valueOf(0))
             } else {
-//                 결제가 안되는 상황
+                 //- 결제가 안되는 상황
+                this@MainActivity.showAlert("결제가 안되는 상황")
             }
         } catch (e: Exception) {
         }
